@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Cleaner",
+  "version": "1.4",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "youtube-cleaner@oyaba.dev",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*", "*://youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
