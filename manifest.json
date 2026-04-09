@@ -10,6 +10,7 @@
       }
     }
   },
+  "host_permissions": ["*://www.youtube.com/*", "*://youtube.com/*"],
   "content_scripts": [
     {
       "matches": ["*://www.youtube.com/*", "*://youtube.com/*"],
