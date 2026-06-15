@@ -107,6 +107,12 @@ const SEARCH_REFINEMENT_ROW_CANDIDATES = [
   "[class*='chip' i]",
 ].join(", ");
 
+const WATCH_PLAYLIST_PANEL_SELECTOR = [
+  "ytd-playlist-panel-renderer",
+  "yt-playlist-panel-renderer",
+  "ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-playlist']",
+].join(", ");
+
 const SUBSCRIPTIONS_STYLE_ID = "youtube-cleaner-subscriptions-style";
 const SHORTS_STYLE_ID = "youtube-cleaner-shorts-style";
 const WATCH_STYLE_ID = "youtube-cleaner-watch-style";
@@ -794,9 +800,56 @@ function cleanShortsLinks() {
 }
 
 // Keep the watch page itself, but remove the related/recommended videos column.
+function isPlaylistWatchPage() {
+  if (location.pathname !== "/watch") {
+    return false;
+  }
+
+  return (
+    new URLSearchParams(location.search).has("list") ||
+    Boolean(document.querySelector(WATCH_PLAYLIST_PANEL_SELECTOR))
+  );
+}
+
+function syncWatchPlaylistState() {
+  if (!isPlaylistWatchPage()) {
+    delete document.documentElement.dataset.youtubeCleanerPlaylistWatch;
+    return false;
+  }
+
+  document.documentElement.dataset.youtubeCleanerPlaylistWatch = "true";
+  return true;
+}
+
+function restoreWatchPlaylistPanel() {
+  document.querySelectorAll(WATCH_PLAYLIST_PANEL_SELECTOR).forEach((panel) => {
+    let current = panel;
+
+    while (current && current !== document.body) {
+      if (
+        current.matches(
+          [
+            WATCH_PLAYLIST_PANEL_SELECTOR,
+            "ytd-watch-flexy #secondary",
+            "ytd-watch-flexy #secondary-inner",
+            "ytd-watch-flexy #panels",
+            "ytd-watch-flexy #playlist",
+            "ytd-watch-flexy ytd-watch-next-secondary-results-renderer",
+          ].join(", ")
+        )
+      ) {
+        showElement(current);
+      }
+
+      current = current.parentElement;
+    }
+  });
+}
+
 function cleanWatchPage() {
   if (location.pathname !== "/watch") {
     delete document.documentElement.dataset.youtubeCleanerFullscreen;
+    delete document.documentElement.dataset.youtubeCleanerPlaylistWatch;
     return;
   }
 
@@ -805,11 +858,22 @@ function cleanWatchPage() {
   enforceTheaterMode();
   syncFullscreenState();
 
+  const hasPlaylistPanel = syncWatchPlaylistState();
+  if (hasPlaylistPanel) {
+    restoreWatchPlaylistPanel();
+  }
+
   document
     .querySelectorAll(
       "#related, ytd-watch-next-secondary-results-renderer"
     )
-    .forEach(hideElement);
+    .forEach((element) => {
+      if (hasPlaylistPanel && element.querySelector(WATCH_PLAYLIST_PANEL_SELECTOR)) {
+        return;
+      }
+
+      hideElement(element);
+    });
 }
 
 function ensureTheaterModeStyle() {
@@ -883,10 +947,11 @@ function ensureWatchLayoutStyle() {
   const style = document.createElement("style");
   style.id = WATCH_STYLE_ID;
   style.textContent = `
-    ytd-watch-flexy #secondary,
-    ytd-watch-flexy #secondary-inner,
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy #secondary,
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy #secondary-inner,
     ytd-watch-flexy #related,
-    ytd-watch-flexy ytd-watch-next-secondary-results-renderer {
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy ytd-watch-next-secondary-results-renderer,
+    html[data-youtube-cleaner-playlist-watch="true"] ytd-watch-flexy ytd-watch-next-secondary-results-renderer:not(:has(${WATCH_PLAYLIST_PANEL_SELECTOR})) {
       display: none !important;
       width: 0 !important;
       min-width: 0 !important;
@@ -894,14 +959,14 @@ function ensureWatchLayoutStyle() {
       padding: 0 !important;
     }
 
-    ytd-watch-flexy[is-two-columns_] #columns {
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy[is-two-columns_] #columns {
       display: block !important;
       max-width: 1280px !important;
       margin: 0 auto !important;
     }
 
-    ytd-watch-flexy[is-two-columns_] #primary,
-    ytd-watch-flexy[is-two-columns_] #primary-inner {
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy[is-two-columns_] #primary,
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy[is-two-columns_] #primary-inner {
       max-width: 1280px !important;
       width: 100% !important;
       margin: 0 auto !important;
@@ -909,8 +974,8 @@ function ensureWatchLayoutStyle() {
       box-sizing: border-box !important;
     }
 
-    ytd-watch-flexy[flexy][is-two-columns_] #player,
-    ytd-watch-flexy[flexy][is-two-columns_] #full-bleed-container {
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy[flexy][is-two-columns_] #player,
+    html:not([data-youtube-cleaner-playlist-watch="true"]) ytd-watch-flexy[flexy][is-two-columns_] #full-bleed-container {
       max-width: 100% !important;
       width: 100% !important;
     }
