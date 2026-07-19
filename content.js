@@ -805,10 +805,13 @@ function isPlaylistWatchPage() {
     return false;
   }
 
-  return (
-    new URLSearchParams(location.search).has("list") ||
-    Boolean(document.querySelector(WATCH_PLAYLIST_PANEL_SELECTOR))
-  );
+  const playlistId = new URLSearchParams(location.search).get("list")?.trim();
+
+  if (!playlistId) {
+    return false;
+  }
+
+  return !["nan", "null", "undefined"].includes(playlistId.toLowerCase());
 }
 
 function syncWatchPlaylistState() {
