@@ -68,8 +68,6 @@ const SEARCH_RESULT_CONTAINERS = [
 const SEARCH_REFINEMENT_CONTAINERS = [
   "ytd-search-refinement-card-renderer",
   "yt-search-refinement-card-view-model",
-  "yt-lockup-view-model",
-  "yt-list-item-view-model",
   "yt-chip-cloud-chip-renderer",
   "yt-chip-cloud-chip-view-model",
   "yt-chip-cloud-chip",
@@ -77,10 +75,13 @@ const SEARCH_REFINEMENT_CONTAINERS = [
   "ytd-search-query-correction-renderer",
 ].join(", ");
 
-const SEARCH_REFINEMENT_SECTION_CONTAINERS = [
-  "ytd-item-section-renderer",
+const GENERIC_SEARCH_REFINEMENT_CONTAINERS = [
   "yt-lockup-view-model",
   "yt-list-item-view-model",
+].join(", ");
+
+const SEARCH_REFINEMENT_SECTION_CONTAINERS = [
+  "ytd-item-section-renderer",
   "ytd-search-refinement-card-renderer",
   "yt-search-refinement-card-view-model",
   "yt-chip-cloud-chip-renderer",
@@ -133,16 +134,20 @@ function normalizeText(value) {
   return (value || "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function getPathFromUrl(value) {
+function getUrlFromValue(value) {
   if (!value) {
-    return "";
+    return null;
   }
 
   try {
-    return new URL(value, location.origin).pathname;
+    return new URL(value, location.origin);
   } catch (error) {
-    return "";
+    return null;
   }
+}
+
+function getPathFromUrl(value) {
+  return getUrlFromValue(value)?.pathname || "";
 }
 
 function isHomePath(pathname) {
@@ -155,6 +160,10 @@ function isSubscriptionsPath(pathname) {
 
 function isShortsPath(pathname) {
   return pathname === "/shorts" || pathname.startsWith(SHORTS_PATH_PREFIX);
+}
+
+function isSearchRoute(pathname = location.pathname, search = location.search) {
+  return pathname === "/results" || new URLSearchParams(search).has("search_query");
 }
 
 function getRedirectRouteKey(pathname) {
@@ -323,6 +332,11 @@ function getElementLabel(element) {
 }
 
 function redirectIfNeeded() {
+  if (isSearchRoute()) {
+    redirectInFlight = false;
+    return false;
+  }
+
   if (isSubscriptionsPath(location.pathname)) {
     redirectInFlight = false;
     return false;
@@ -492,6 +506,13 @@ function hasPathLink(element, predicate) {
   });
 }
 
+function hasSearchQueryLink(element) {
+  return hasPathLink(element, (path, href) => {
+    const url = getUrlFromValue(href);
+    return path === "/results" && Boolean(url?.searchParams.has("search_query"));
+  });
+}
+
 function isCleanerHidden(element) {
   return Boolean(element.closest('[data-youtube-cleaner-hidden="true"], [hidden]'));
 }
@@ -573,6 +594,20 @@ function findSmallestNonVideoContainer(element) {
   return fallback;
 }
 
+function getSearchRefinementTarget(element) {
+  const explicitTarget = element.closest(SEARCH_REFINEMENT_CONTAINERS);
+  if (explicitTarget) {
+    return explicitTarget;
+  }
+
+  const genericTarget = element.closest(GENERIC_SEARCH_REFINEMENT_CONTAINERS);
+  if (genericTarget && !hasRealSearchResultLink(genericTarget)) {
+    return genericTarget;
+  }
+
+  return element.closest("a[href]") || element;
+}
+
 function isShortsOnlyItemSection(section) {
   const title = normalizeText(
     section.querySelector("#title, #heading")?.textContent
@@ -651,18 +686,11 @@ function cleanSearchRefinementRows() {
         return;
       }
 
-      const target =
-        element.closest(SEARCH_REFINEMENT_CONTAINERS) ||
-        element.closest("a[href]") ||
-        element;
-      const hasSearchQueryLink = hasPathLink(
-        target,
-        (path, href) => path === "/results" && href.includes("search_query=")
-      );
+      const target = getSearchRefinementTarget(element);
       const hasRealResultLink = hasRealSearchResultLink(target);
       const hasShortsSignal = hasShortsHeaderSignal(target);
 
-      if (!hasRealResultLink && (hasSearchQueryLink || hasShortsSignal)) {
+      if (!hasRealResultLink && (hasSearchQueryLink(target) || hasShortsSignal)) {
         hideElement(target);
       }
     });
@@ -725,9 +753,7 @@ function ensureShortsStyle() {
     ytd-search grid-shelf-view-model:has(yt-section-header-view-model[data-youtube-cleaner-hidden="true"]),
     ytd-search yt-lockup-view-model:has(a[href*="/shorts/"]),
     ytd-search ytd-search-refinement-card-renderer,
-    ytd-search yt-search-refinement-card-view-model,
-    ytd-search yt-lockup-view-model:has(a[href*="search_query="]),
-    ytd-search yt-list-item-view-model:has(a[href*="search_query="]) {
+    ytd-search yt-search-refinement-card-view-model {
       display: none !important;
     }
   `;
@@ -1447,11 +1473,16 @@ function handleDocumentClick(event) {
     return;
   }
 
-  if (link.origin !== location.origin) {
+  const targetUrl = getUrlFromValue(link.getAttribute("href") || link.href);
+  if (!targetUrl || targetUrl.origin !== location.origin) {
     return;
   }
 
-  const path = getPathFromUrl(link.getAttribute("href") || link.href);
+  if (isSearchRoute(targetUrl.pathname, targetUrl.search)) {
+    return;
+  }
+
+  const path = targetUrl.pathname;
   if (!isHomePath(path) && !isShortsPath(path)) {
     return;
   }
